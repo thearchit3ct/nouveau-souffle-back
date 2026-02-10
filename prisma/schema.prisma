@@ -515,3 +515,15 @@ model UserSession {
   @@index([expiresAt])
   @@map("user_sessions")
 }
+
+model StripeWebhookLog {
+  id          String   @id @default(uuid())
+  eventId     String   @unique @map("event_id")
+  type        String
+  data        Json     @default("{}")
+  processedAt DateTime @default(now()) @map("processed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([type])
+  @@map("stripe_webhook_logs")
+}

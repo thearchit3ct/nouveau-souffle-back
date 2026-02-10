@@ -17,6 +17,7 @@ import {
 } from '@nestjs/swagger';
 import { DonationsService } from './donations.service.js';
 import { CreateDonationDto } from './dto/create-donation.dto.js';
+import { CreateDonationIntentDto } from '../payments/dto/create-donation-intent.dto.js';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { RolesGuard } from '../auth/roles.guard.js';
 import { Roles } from '../auth/roles.decorator.js';
@@ -28,6 +29,13 @@ import type { CurrentUserPayload } from '../auth/current-user.decorator.js';
 @ApiBearerAuth()
 export class DonationsController {
   constructor(private readonly donationsService: DonationsService) {}
+
+  @Post('intent')
+  @ApiOperation({ summary: 'Create a Stripe payment intent for a donation (public)' })
+  @ApiResponse({ status: 201, description: 'Payment intent created with clientSecret' })
+  async createPaymentIntent(@Body() dto: CreateDonationIntentDto) {
+    return this.donationsService.createPaymentIntent(dto);
+  }
 
   @Post()
   @UseGuards(AuthGuard)

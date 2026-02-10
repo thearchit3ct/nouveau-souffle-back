@@ -7,7 +7,9 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { AuditService } from '../common/audit/audit.service.js';
+import { StripeService } from '../payments/stripe.service.js';
 import { CreateDonationDto } from './dto/create-donation.dto.js';
+import { CreateDonationIntentDto } from '../payments/dto/create-donation-intent.dto.js';
 
 @Injectable()
 export class DonationsService {
@@ -15,6 +17,7 @@ export class DonationsService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly audit: AuditService,
+    private readonly stripe: StripeService,
   ) {}
 
   async create(userId: string, dto: CreateDonationDto) {
@@ -201,6 +204,64 @@ export class DonationsService {
         totalAmount: totalAmount._sum.amount ?? 0,
         totalCount,
         byMonth,
+      },
+    };
+  }
+
+  async createPaymentIntent(dto: CreateDonationIntentDto) {
+    // Validate project if provided
+    if (dto.projectId) {
+      const project = await this.prisma.project.findUnique({
+        where: { id: dto.projectId },
+      });
+      if (!project || project.status !== 'ACTIVE') {
+        throw new BadRequestException('Projet invalide ou inactif');
+      }
+    }
+
+    // Create Stripe PaymentIntent (amount in cents)
+    const { id: paymentIntentId, client_secret: clientSecret } =
+      await this.stripe.createPaymentIntent(
+        Math.round(dto.amount * 100),
+        'eur',
+        {
+          donorEmail: dto.donorEmail,
+          donorFirstName: dto.donorFirstName,
+          donorLastName: dto.donorLastName,
+          projectId: dto.projectId ?? '',
+          isAnonymous: String(dto.isAnonymous ?? false),
+        },
+        dto.donorEmail,
+      );
+
+    // Create donation record in DB
+    const donation = await this.prisma.donation.create({
+      data: {
+        amount: dto.amount,
+        type: 'ONE_TIME',
+        status: 'PENDING',
+        stripePaymentIntentId: paymentIntentId,
+        projectId: dto.projectId ?? null,
+        isAnonymous: dto.isAnonymous ?? false,
+        receiptRequested: dto.receiptRequested ?? true,
+        paymentMethod: 'CARD',
+        metadata: {
+          donorEmail: dto.donorEmail,
+          donorFirstName: dto.donorFirstName,
+          donorLastName: dto.donorLastName,
+          donorAddress: dto.donorAddress ?? '',
+          donorPostalCode: dto.donorPostalCode ?? '',
+          donorCity: dto.donorCity ?? '',
+        },
+      },
+    });
+
+    return {
+      data: {
+        donationId: donation.id,
+        clientSecret,
+        amount: dto.amount,
+        currency: 'eur',
       },
     };
   }

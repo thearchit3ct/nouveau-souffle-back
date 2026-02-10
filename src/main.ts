@@ -8,7 +8,7 @@ import { SuperTokensExceptionFilter } from './auth/auth.filter.js';
 import supertokens from 'supertokens-node';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // CORS - SuperTokens compatible
   app.enableCors({
@@ -60,6 +60,9 @@ async function bootstrap() {
     .addTag('articles', 'Article/blog management')
     .addTag('categories', 'Category management')
     .addTag('uploads', 'File upload management')
+    .addTag('webhooks', 'Stripe webhook handlers')
+    .addTag('receipts', 'Donation receipt management')
+    .addTag('contact', 'Contact form')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);

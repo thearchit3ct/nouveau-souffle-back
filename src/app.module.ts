@@ -16,11 +16,17 @@ import { EventsModule } from './events/events.module.js';
 import { CategoriesModule } from './categories/categories.module.js';
 import { ArticlesModule } from './articles/articles.module.js';
 import { UploadModule } from './upload/upload.module.js';
+import { PaymentsModule } from './payments/payments.module.js';
+import { ContactModule } from './contact/contact.module.js';
+import { EmailModule } from './email/email.module.js';
+import { ReceiptsModule } from './receipts/receipts.module.js';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 10 }]),
     PrismaModule,
     HealthModule,
     AuthModule.forRoot(),
@@ -34,6 +40,10 @@ import { UploadModule } from './upload/upload.module.js';
     CategoriesModule,
     ArticlesModule,
     UploadModule,
+    PaymentsModule,
+    EmailModule,
+    ReceiptsModule,
+    ContactModule,
   ],
   controllers: [AppController],
   providers: [AppService],

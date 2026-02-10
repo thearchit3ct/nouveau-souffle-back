@@ -4,6 +4,7 @@ import {
   S3Client,
   PutObjectCommand,
   DeleteObjectCommand,
+  GetObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
@@ -73,5 +74,31 @@ export class UploadService {
 
     const url = await getSignedUrl(this.s3, command, { expiresIn });
     return { url, expiresIn };
+  }
+
+  async getDownloadUrl(key: string, expiresIn = 3600) {
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    });
+
+    const url = await getSignedUrl(this.s3, command, { expiresIn });
+    return { url, expiresIn };
+  }
+
+  async uploadBuffer(buffer: Buffer, key: string, contentType: string) {
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+      }),
+    );
+
+    return {
+      url: `${this.endpoint}/${this.bucket}/${key}`,
+      key,
+    };
   }
 }
