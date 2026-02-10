@@ -54,6 +54,26 @@ export class EventsController {
     return this.eventsService.findAll(pageNum, limitNum, status, type, visibility);
   }
 
+  @Get('registrations/by-token/:token')
+  @ApiOperation({ summary: 'Get registration by confirmation token (for QR check-in)' })
+  @ApiResponse({ status: 200, description: 'Registration details' })
+  @ApiResponse({ status: 404, description: 'Registration not found' })
+  async findRegistrationByToken(@Param('token') token: string) {
+    return this.eventsService.findRegistrationByToken(token);
+  }
+
+  @Patch('registrations/by-token/:token/check-in')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('COORDINATOR', 'ADMIN', 'SUPER_ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Check-in by token (QR code scan)' })
+  @ApiResponse({ status: 200, description: 'Checked in successfully' })
+  @ApiResponse({ status: 400, description: 'Not confirmed or already checked in' })
+  @ApiResponse({ status: 404, description: 'Registration not found' })
+  async checkInByToken(@Param('token') token: string) {
+    return this.eventsService.checkInByToken(token);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get event by ID' })
   @ApiResponse({ status: 200, description: 'Event details' })

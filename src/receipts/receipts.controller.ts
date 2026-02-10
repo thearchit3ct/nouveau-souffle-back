@@ -11,6 +11,8 @@ import { ReceiptsService } from './receipts.service.js';
 import { UploadService } from '../upload/upload.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AuthGuard } from '../auth/auth.guard.js';
+import { RolesGuard } from '../auth/roles.guard.js';
+import { Roles } from '../auth/roles.decorator.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import type { CurrentUserPayload } from '../auth/current-user.decorator.js';
 
@@ -23,6 +25,43 @@ export class ReceiptsController {
     private readonly upload: UploadService,
     private readonly prisma: PrismaService,
   ) {}
+
+  @Get('annual/:year')
+  @UseGuards(AuthGuard)
+  @ApiOperation({ summary: 'Generate and download annual receipt' })
+  @ApiResponse({ status: 200, description: 'Annual receipt URL' })
+  async getAnnualReceipt(
+    @Param('year') year: string,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    const yearNum = parseInt(year, 10);
+    // Try to get existing, if not found generate it
+    try {
+      return await this.receipts.getAnnualReceiptUrl(user.userId, yearNum);
+    } catch {
+      await this.receipts.generateAnnualReceipt(user.userId, yearNum);
+      return this.receipts.getAnnualReceiptUrl(user.userId, yearNum);
+    }
+  }
+
+  @Get('annual/:year/user/:userId')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Generate annual receipt for specific user (admin)' })
+  @ApiResponse({ status: 200, description: 'Annual receipt URL' })
+  async getAnnualReceiptForUser(
+    @Param('year') year: string,
+    @Param('userId') userId: string,
+  ) {
+    const yearNum = parseInt(year, 10);
+    try {
+      return await this.receipts.getAnnualReceiptUrl(userId, yearNum);
+    } catch {
+      await this.receipts.generateAnnualReceipt(userId, yearNum);
+      return this.receipts.getAnnualReceiptUrl(userId, yearNum);
+    }
+  }
 
   @Get(':id/receipt')
   @UseGuards(AuthGuard)

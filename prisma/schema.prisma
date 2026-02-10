@@ -139,6 +139,41 @@ enum VolunteerStatus {
   PAUSED
 }
 
+enum DocumentVisibility {
+  PUBLIC
+  MEMBERS
+  ADMIN
+}
+
+enum DocumentCategory {
+  GUIDE
+  REPORT
+  FORM
+  MEETING_MINUTES
+  STATUTES
+  TRAINING
+  OTHER
+}
+
+enum TrainingStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum TrainingModuleType {
+  VIDEO
+  PDF
+  QUIZ
+  TEXT
+}
+
+enum EnrollmentStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
 // ---------------------------------------------------------------------------
 // Models
 // ---------------------------------------------------------------------------
@@ -180,6 +215,8 @@ model User {
   donationRecurrences DonationRecurrence[]
   volunteers         Volunteer[]
   approvedVolunteers Volunteer[]         @relation("VolunteerApprover")
+  documents          Document[]
+  trainingEnrollments TrainingEnrollment[]
 
   @@index([status])
   @@index([role])
@@ -548,6 +585,7 @@ model Volunteer {
   user        User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
   approvedBy  User?                 @relation("VolunteerApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   assignments VolunteerAssignment[]
+  enrollments TrainingEnrollment[]
 
   @@index([status])
   @@index([email])
@@ -573,6 +611,106 @@ model VolunteerAssignment {
   @@index([volunteerId])
   @@index([eventId])
   @@map("volunteer_assignments")
+}
+
+model Document {
+  id           String             @id @default(uuid())
+  uploadedById String             @map("uploaded_by_id")
+  title        String
+  description  String?
+  fileName     String             @map("file_name")
+  fileSize     Int                @map("file_size")
+  mimeType     String             @map("mime_type")
+  filePath     String             @map("file_path")
+  visibility   DocumentVisibility @default(MEMBERS)
+  category     DocumentCategory   @default(OTHER)
+  tags         String[]           @default([])
+  downloadCount Int               @default(0) @map("download_count")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+
+  uploadedBy User @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([visibility])
+  @@index([category])
+  @@map("documents")
+}
+
+model Training {
+  id          String         @id @default(uuid())
+  title       String
+  slug        String         @unique
+  description String?
+  imageUrl    String?        @map("image_url")
+  status      TrainingStatus @default(DRAFT)
+  duration    Int?
+  difficulty  String         @default("beginner")
+  tags        String[]       @default([])
+  publishedAt DateTime?      @map("published_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  modules     TrainingModule[]
+  enrollments TrainingEnrollment[]
+
+  @@index([status])
+  @@index([slug])
+  @@map("trainings")
+}
+
+model TrainingModule {
+  id          String             @id @default(uuid())
+  trainingId  String             @map("training_id")
+  title       String
+  type        TrainingModuleType @default(TEXT)
+  content     String?
+  fileUrl     String?            @map("file_url")
+  duration    Int?
+  sortOrder   Int                @default(0) @map("sort_order")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  training    Training              @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  completions TrainingCompletion[]
+
+  @@index([trainingId, sortOrder])
+  @@map("training_modules")
+}
+
+model TrainingEnrollment {
+  id           String           @id @default(uuid())
+  trainingId   String           @map("training_id")
+  userId       String?          @map("user_id")
+  volunteerId  String?          @map("volunteer_id")
+  status       EnrollmentStatus @default(IN_PROGRESS)
+  progress     Int              @default(0)
+  startedAt    DateTime         @default(now()) @map("started_at")
+  completedAt  DateTime?        @map("completed_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  training    Training              @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+  user        User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  volunteer   Volunteer?            @relation(fields: [volunteerId], references: [id], onDelete: SetNull)
+  completions TrainingCompletion[]
+
+  @@unique([trainingId, userId])
+  @@index([userId])
+  @@index([volunteerId])
+  @@map("training_enrollments")
+}
+
+model TrainingCompletion {
+  id           String   @id @default(uuid())
+  enrollmentId String   @map("enrollment_id")
+  moduleId     String   @map("module_id")
+  completedAt  DateTime @default(now()) @map("completed_at")
+
+  enrollment TrainingEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  module     TrainingModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, moduleId])
+  @@map("training_completions")
 }
 
 model StripeWebhookLog {

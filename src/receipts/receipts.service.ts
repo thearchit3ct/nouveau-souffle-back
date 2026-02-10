@@ -68,6 +68,205 @@ export class ReceiptsService {
     });
   }
 
+  async generateAnnualReceipt(userId: string, year: number) {
+    // Find all completed donations for this user in the given year
+    const donations = await this.prisma.donation.findMany({
+      where: {
+        userId,
+        status: 'COMPLETED',
+        paidAt: {
+          gte: new Date(`${year}-01-01T00:00:00Z`),
+          lt: new Date(`${year + 1}-01-01T00:00:00Z`),
+        },
+      },
+      include: { project: true },
+      orderBy: { paidAt: 'asc' },
+    });
+
+    if (donations.length === 0) {
+      throw new NotFoundException('Aucun don pour cette annee');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('Utilisateur non trouve');
+
+    const totalAmount = donations.reduce((sum, d) => sum + Number(d.amount), 0);
+
+    // Generate receipt number: RFA-{year}-{userId short}
+    const receiptNumber = `RFA-${year}-${userId.substring(0, 8).toUpperCase()}`;
+
+    // Generate PDF
+    const pdfBuffer = await this.createAnnualReceiptPdf(user, donations, totalAmount, receiptNumber, year);
+
+    // Upload to MinIO
+    const key = `receipts/annual/${year}/${receiptNumber}.pdf`;
+    await this.upload.uploadBuffer(pdfBuffer, key, 'application/pdf');
+
+    this.logger.log(`Annual receipt ${receiptNumber} generated for user ${userId}, year ${year}`);
+
+    return {
+      data: {
+        receiptNumber,
+        year,
+        totalAmount,
+        donationsCount: donations.length,
+        filePath: key,
+      },
+    };
+  }
+
+  async getAnnualReceiptUrl(userId: string, year: number) {
+    const receiptNumber = `RFA-${year}-${userId.substring(0, 8).toUpperCase()}`;
+    const key = `receipts/annual/${year}/${receiptNumber}.pdf`;
+    try {
+      const { url } = await this.upload.getDownloadUrl(key, 600);
+      return { data: { receiptUrl: url, receiptNumber, filename: `${receiptNumber}.pdf` } };
+    } catch {
+      throw new NotFoundException('Recu annuel non genere pour cette annee');
+    }
+  }
+
+  private createAnnualReceiptPdf(
+    user: any,
+    donations: any[],
+    totalAmount: number,
+    receiptNumber: string,
+    year: number,
+  ): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 50 });
+      const chunks: Buffer[] = [];
+
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const donorName = `${user.firstName} ${user.lastName}`;
+
+      let amountInWords = '';
+      try {
+        amountInWords = n2words(totalAmount, { lang: 'fr' }) + ' euros';
+      } catch {
+        amountInWords = `${totalAmount} euros`;
+      }
+
+      // Header
+      doc.fontSize(16).font('Helvetica-Bold').text('NOUVEAU SOUFFLE EN MISSION', { align: 'center' });
+      doc.fontSize(10).font('Helvetica').text('Association loi 1901', { align: 'center' });
+      doc.moveDown(2);
+
+      // Title
+      doc.fontSize(14).font('Helvetica-Bold').text(
+        `RECU FISCAL ANNUEL ${year}`,
+        { align: 'center' },
+      );
+      doc.fontSize(10).font('Helvetica').text(
+        'Articles 200 et 238 bis du Code General des Impots',
+        { align: 'center' },
+      );
+      doc.moveDown(2);
+
+      // Receipt info
+      doc.fontSize(10).font('Helvetica-Bold').text(`Recu n° : ${receiptNumber}`);
+      doc.font('Helvetica').text(`Date d'emission : ${new Date().toLocaleDateString('fr-FR')}`);
+      doc.text(`Annee fiscale : ${year}`);
+      doc.moveDown(1.5);
+
+      doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+      doc.moveDown(1);
+
+      // Donor info
+      doc.fontSize(11).font('Helvetica-Bold').text('DONATEUR');
+      doc.moveDown(0.5);
+      doc.fontSize(10).font('Helvetica');
+      doc.text(`Nom : ${donorName}`);
+      if (user.email) doc.text(`Email : ${user.email}`);
+      if (user.addressLine1) doc.text(`Adresse : ${user.addressLine1}`);
+      if (user.postalCode || user.city) doc.text(`${user.postalCode ?? ''} ${user.city ?? ''}`.trim());
+      doc.moveDown(1.5);
+
+      doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+      doc.moveDown(1);
+
+      // Donations table
+      doc.fontSize(11).font('Helvetica-Bold').text('RECAPITULATIF DES DONS');
+      doc.moveDown(0.5);
+
+      // Table header
+      const tableTop = doc.y;
+      doc.fontSize(9).font('Helvetica-Bold');
+      doc.text('Date', 50, tableTop, { width: 80 });
+      doc.text('Montant', 130, tableTop, { width: 80 });
+      doc.text('Projet', 210, tableTop, { width: 200 });
+      doc.text('Recu', 410, tableTop, { width: 135 });
+      doc.moveDown(0.5);
+
+      doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+      doc.moveDown(0.3);
+
+      // Table rows
+      doc.fontSize(9).font('Helvetica');
+      for (const donation of donations) {
+        const y = doc.y;
+        if (y > 700) { doc.addPage(); }
+        const date = donation.paidAt
+          ? new Date(donation.paidAt).toLocaleDateString('fr-FR')
+          : new Date(donation.createdAt).toLocaleDateString('fr-FR');
+        doc.text(date, 50, doc.y, { width: 80 });
+        doc.text(`${Number(donation.amount).toFixed(2)} EUR`, 130, doc.y - doc.currentLineHeight(), { width: 80 });
+        doc.text(donation.project?.name ?? '-', 210, doc.y - doc.currentLineHeight(), { width: 200 });
+        doc.text(donation.receiptNumber ?? '-', 410, doc.y - doc.currentLineHeight(), { width: 135 });
+        doc.moveDown(0.3);
+      }
+
+      doc.moveDown(0.5);
+      doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+      doc.moveDown(0.5);
+
+      // Total
+      doc.fontSize(11).font('Helvetica-Bold');
+      doc.text(`TOTAL : ${totalAmount.toFixed(2)} EUR`, { align: 'right' });
+      doc.fontSize(10).font('Helvetica');
+      doc.text(`Soit : ${amountInWords}`, { align: 'right' });
+      doc.moveDown(1.5);
+
+      doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+      doc.moveDown(1);
+
+      // Legal attestation
+      doc.fontSize(11).font('Helvetica-Bold').text('ATTESTATION');
+      doc.moveDown(0.5);
+      doc.fontSize(9).font('Helvetica');
+      doc.text(
+        'L\'association Nouveau Souffle en Mission certifie que les dons mentionnes ci-dessus ' +
+        'ont ete effectues a titre gratuit, sans aucune contrepartie directe ou indirecte.',
+        { align: 'justify' },
+      );
+      doc.moveDown(0.5);
+
+      // Tax reduction
+      doc.fontSize(10).font('Helvetica-Bold').text('REDUCTION D\'IMPOT');
+      doc.moveDown(0.3);
+      doc.fontSize(9).font('Helvetica');
+      doc.text(
+        `Le total de vos dons ouvre droit a une reduction d'impot de ${(totalAmount * 0.66).toFixed(2)} EUR ` +
+        `(66% de ${totalAmount.toFixed(2)} EUR, dans la limite de 20% du revenu imposable).`,
+        { align: 'justify' },
+      );
+      doc.moveDown(2);
+
+      // Signature
+      doc.fontSize(10).font('Helvetica').text(
+        `Fait a Paris, le ${new Date().toLocaleDateString('fr-FR')}`,
+        { align: 'right' },
+      );
+      doc.moveDown(0.5);
+      doc.text('Le President de l\'association', { align: 'right' });
+
+      doc.end();
+    });
+  }
+
   private createReceiptPdf(
     donation: any,
     receiptNumber: string,

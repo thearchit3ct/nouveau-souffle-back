@@ -319,6 +319,38 @@ export class EventsService {
     return { data: updated };
   }
 
+  async findRegistrationByToken(token: string) {
+    const registration = await this.prisma.eventRegistration.findUnique({
+      where: { confirmationToken: token },
+      include: {
+        event: { select: { id: true, title: true, slug: true, startDatetime: true, locationName: true, status: true } },
+        user: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
+    });
+    if (!registration) throw new NotFoundException('Inscription non trouvee');
+    return { data: registration };
+  }
+
+  async checkInByToken(token: string) {
+    const registration = await this.prisma.eventRegistration.findUnique({
+      where: { confirmationToken: token },
+    });
+    if (!registration) throw new NotFoundException('Inscription non trouvee');
+    if (registration.status !== 'CONFIRMED') {
+      throw new BadRequestException('Seule une inscription confirmee peut etre pointee');
+    }
+    if (registration.checkedInAt) {
+      throw new BadRequestException('Deja pointe');
+    }
+
+    const updated = await this.prisma.eventRegistration.update({
+      where: { id: registration.id },
+      data: { checkedInAt: new Date() },
+    });
+
+    return { data: updated };
+  }
+
   private generateSlug(title: string): string {
     return title
       .toLowerCase()
