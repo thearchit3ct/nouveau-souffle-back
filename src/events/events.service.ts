@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { SearchService } from '../search/search.service.js';
+import { EmailService } from '../email/email.service.js';
 import { CreateEventDto } from './dto/create-event.dto.js';
 import { UpdateEventDto } from './dto/update-event.dto.js';
 import { randomUUID } from 'crypto';
@@ -17,6 +18,7 @@ export class EventsService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly searchService: SearchService,
+    private readonly emailService: EmailService,
   ) {}
 
   async findAll(page = 1, limit = 25, status?: string, type?: string, visibility?: string) {
@@ -155,6 +157,20 @@ export class EventsService {
       }
     }
 
+    // Send cancellation email to all registered users
+    for (const reg of registrations) {
+      if (reg.userId) {
+        const user = await this.prisma.user.findUnique({ where: { id: reg.userId } });
+        if (user?.email) {
+          await this.emailService.sendEventCanceled(
+            user.email,
+            `${user.firstName} ${user.lastName}`,
+            event.title,
+          );
+        }
+      }
+    }
+
     return { data: updated };
   }
 
@@ -202,6 +218,20 @@ export class EventsService {
       { eventId, registrationId: registration.id },
       `/evenements/${event.slug}`,
     );
+
+    // Send confirmation email
+    if (status === 'CONFIRMED') {
+      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (user?.email) {
+        await this.emailService.sendEventRegistrationConfirmed(
+          user.email,
+          `${user.firstName} ${user.lastName}`,
+          event.title,
+          event.startDatetime.toLocaleDateString('fr-FR'),
+          event.locationName ?? '',
+        );
+      }
+    }
 
     return { data: registration };
   }

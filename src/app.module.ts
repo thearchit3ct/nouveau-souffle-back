@@ -21,6 +21,8 @@ import { ContactModule } from './contact/contact.module.js';
 import { EmailModule } from './email/email.module.js';
 import { ReceiptsModule } from './receipts/receipts.module.js';
 import { SearchModule } from './search/search.module.js';
+import { RecurrencesModule } from './recurrences/recurrences.module.js';
+import { VolunteersModule } from './volunteers/volunteers.module.js';
 import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
@@ -46,6 +48,8 @@ import { ThrottlerModule } from '@nestjs/throttler';
     ReceiptsModule,
     ContactModule,
     SearchModule,
+    RecurrencesModule,
+    VolunteersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

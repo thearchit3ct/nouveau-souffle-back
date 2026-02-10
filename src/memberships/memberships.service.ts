@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { AuditService } from '../common/audit/audit.service.js';
+import { EmailService } from '../email/email.service.js';
 import { CreateMembershipDto } from './dto/create-membership.dto.js';
 
 @Injectable()
@@ -15,6 +16,7 @@ export class MembershipsService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly audit: AuditService,
+    private readonly emailService: EmailService,
   ) {}
 
   async create(userId: string, dto: CreateMembershipDto) {
@@ -160,6 +162,16 @@ export class MembershipsService {
 
     await this.audit.log(adminId, 'MEMBERSHIP_VALIDATE', 'Membership', id, { status: 'PENDING' }, { status: 'ACTIVE', memberNumber });
 
+    // Send approval email
+    if (membership.user.email) {
+      await this.emailService.sendMembershipApproved(
+        membership.user.email,
+        `${membership.user.firstName} ${membership.user.lastName}`,
+        memberNumber,
+        membershipType?.name ?? 'Standard',
+      );
+    }
+
     return { data: updated };
   }
 
@@ -185,6 +197,15 @@ export class MembershipsService {
     );
 
     await this.audit.log(adminId, 'MEMBERSHIP_REJECT', 'Membership', id, { status: 'PENDING' }, { status: 'REJECTED' });
+
+    // Send rejection email
+    const user = await this.prisma.user.findUnique({ where: { id: membership.userId } });
+    if (user?.email) {
+      await this.emailService.sendMembershipRejected(
+        user.email,
+        `${user.firstName} ${user.lastName}`,
+      );
+    }
 
     return { data: updated };
   }

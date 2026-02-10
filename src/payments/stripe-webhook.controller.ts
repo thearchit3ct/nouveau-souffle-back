@@ -78,6 +78,21 @@ export class StripeWebhookController {
       case 'charge.refunded':
         await this.handleChargeRefunded(event.data.object as any);
         break;
+      case 'customer.subscription.created':
+        await this.handleSubscriptionCreated(event.data.object as any);
+        break;
+      case 'invoice.payment_succeeded':
+        await this.handleInvoicePaymentSucceeded(event.data.object as any);
+        break;
+      case 'invoice.payment_failed':
+        await this.handleInvoicePaymentFailed(event.data.object as any);
+        break;
+      case 'customer.subscription.updated':
+        await this.handleSubscriptionUpdated(event.data.object as any);
+        break;
+      case 'customer.subscription.deleted':
+        await this.handleSubscriptionDeleted(event.data.object as any);
+        break;
       default:
         this.logger.log(`Unhandled event type: ${event.type}`);
     }
@@ -190,5 +205,212 @@ export class StripeWebhookController {
     });
 
     this.logger.log(`Donation ${donation.id} refunded`);
+  }
+
+  private async handleSubscriptionCreated(subscription: any) {
+    const recurrence = await this.prisma.donationRecurrence.findFirst({
+      where: { stripeSubscriptionId: subscription.id },
+    });
+    if (!recurrence) {
+      this.logger.warn(`No recurrence found for subscription ${subscription.id}`);
+      return;
+    }
+
+    if (recurrence.status !== 'ACTIVE') {
+      await this.prisma.donationRecurrence.update({
+        where: { id: recurrence.id },
+        data: { status: 'ACTIVE' },
+      });
+    }
+
+    this.logger.log(`Subscription ${subscription.id} created, recurrence ${recurrence.id} active`);
+  }
+
+  private async handleInvoicePaymentSucceeded(invoice: any) {
+    const subscriptionId = invoice.subscription;
+    if (!subscriptionId) return;
+
+    const recurrence = await this.prisma.donationRecurrence.findFirst({
+      where: { stripeSubscriptionId: subscriptionId },
+      include: { user: true, project: true },
+    });
+    if (!recurrence) {
+      this.logger.warn(`No recurrence found for subscription ${subscriptionId} (invoice succeeded)`);
+      return;
+    }
+
+    // Create a RECURRING donation record linked to this recurrence
+    await this.prisma.donation.create({
+      data: {
+        userId: recurrence.userId,
+        projectId: recurrence.projectId,
+        recurrenceId: recurrence.id,
+        amount: recurrence.amount,
+        type: 'RECURRING',
+        status: 'COMPLETED',
+        paymentMethod: 'CARD',
+        paidAt: new Date(),
+        receiptRequested: true,
+        metadata: {
+          stripeInvoiceId: invoice.id,
+          stripeSubscriptionId: subscriptionId,
+        },
+      },
+    });
+
+    // Increment payment count and update last payment date
+    await this.prisma.donationRecurrence.update({
+      where: { id: recurrence.id },
+      data: {
+        paymentCount: { increment: 1 },
+        lastPaymentDate: new Date(),
+      },
+    });
+
+    // Update project collected amount
+    if (recurrence.projectId) {
+      await this.prisma.project.update({
+        where: { id: recurrence.projectId },
+        data: { collectedAmount: { increment: recurrence.amount } },
+      });
+    }
+
+    // Send confirmation email
+    if (recurrence.user?.email) {
+      const donorName = `${recurrence.user.firstName} ${recurrence.user.lastName}`;
+      await this.emailService.sendDonationConfirmation(
+        recurrence.user.email,
+        donorName,
+        Number(recurrence.amount),
+      );
+    }
+
+    this.logger.log(
+      `Invoice payment succeeded for recurrence ${recurrence.id}, payment #${recurrence.paymentCount + 1}`,
+    );
+  }
+
+  private async handleInvoicePaymentFailed(invoice: any) {
+    const subscriptionId = invoice.subscription;
+    if (!subscriptionId) return;
+
+    const recurrence = await this.prisma.donationRecurrence.findFirst({
+      where: { stripeSubscriptionId: subscriptionId },
+      include: { user: true },
+    });
+    if (!recurrence) {
+      this.logger.warn(`No recurrence found for subscription ${subscriptionId} (invoice failed)`);
+      return;
+    }
+
+    // Notify user of failed payment
+    if (recurrence.user?.email) {
+      const donorName = `${recurrence.user.firstName} ${recurrence.user.lastName}`;
+      const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #dc2626;">Echec de paiement</h2>
+          <p>Bonjour ${donorName},</p>
+          <p>Le paiement de <strong>${Number(recurrence.amount).toFixed(2)} &euro;</strong>
+          pour votre don recurrent n'a pas pu etre traite.</p>
+          <p>Veuillez verifier votre moyen de paiement dans votre espace donateur.</p>
+          <p>Cordialement,<br />L'equipe Nouveau Souffle en Mission</p>
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+          <p style="color: #6b7280; font-size: 12px;">
+            Nouveau Souffle en Mission - Association loi 1901
+          </p>
+        </div>
+      `;
+      await this.emailService.sendTransactional(
+        recurrence.user.email,
+        'Echec de paiement - Don recurrent',
+        html,
+      );
+    }
+
+    this.logger.log(`Invoice payment failed for recurrence ${recurrence.id}`);
+  }
+
+  private async handleSubscriptionUpdated(subscription: any) {
+    const recurrence = await this.prisma.donationRecurrence.findFirst({
+      where: { stripeSubscriptionId: subscription.id },
+    });
+    if (!recurrence) {
+      this.logger.warn(`No recurrence found for subscription ${subscription.id} (updated)`);
+      return;
+    }
+
+    // Map Stripe subscription status to RecurrenceStatus
+    const statusMap: Record<string, string> = {
+      active: 'ACTIVE',
+      past_due: 'ACTIVE',
+      canceled: 'CANCELED',
+      paused: 'PAUSED',
+      unpaid: 'ACTIVE',
+      incomplete: 'ACTIVE',
+      incomplete_expired: 'EXPIRED',
+      trialing: 'ACTIVE',
+    };
+
+    const newStatus = statusMap[subscription.status] ?? recurrence.status;
+    const updateData: any = { status: newStatus };
+
+    if (newStatus === 'CANCELED' && !recurrence.canceledAt) {
+      updateData.canceledAt = new Date();
+    }
+
+    await this.prisma.donationRecurrence.update({
+      where: { id: recurrence.id },
+      data: updateData,
+    });
+
+    this.logger.log(
+      `Subscription ${subscription.id} updated to ${subscription.status}, recurrence ${recurrence.id} -> ${newStatus}`,
+    );
+  }
+
+  private async handleSubscriptionDeleted(subscription: any) {
+    const recurrence = await this.prisma.donationRecurrence.findFirst({
+      where: { stripeSubscriptionId: subscription.id },
+      include: { user: true },
+    });
+    if (!recurrence) {
+      this.logger.warn(`No recurrence found for subscription ${subscription.id} (deleted)`);
+      return;
+    }
+
+    await this.prisma.donationRecurrence.update({
+      where: { id: recurrence.id },
+      data: {
+        status: 'CANCELED',
+        canceledAt: recurrence.canceledAt ?? new Date(),
+      },
+    });
+
+    // Notify user of cancellation
+    if (recurrence.user?.email) {
+      const donorName = `${recurrence.user.firstName} ${recurrence.user.lastName}`;
+      const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #059669;">Don recurrent annule</h2>
+          <p>Bonjour ${donorName},</p>
+          <p>Votre don recurrent de <strong>${Number(recurrence.amount).toFixed(2)} &euro;</strong>
+          a bien ete annule.</p>
+          <p>Nous vous remercions pour votre generosite. Vous pouvez a tout moment
+          mettre en place un nouveau don recurrent depuis votre espace donateur.</p>
+          <p>Cordialement,<br />L'equipe Nouveau Souffle en Mission</p>
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
+          <p style="color: #6b7280; font-size: 12px;">
+            Nouveau Souffle en Mission - Association loi 1901
+          </p>
+        </div>
+      `;
+      await this.emailService.sendTransactional(
+        recurrence.user.email,
+        'Confirmation d\'annulation - Don recurrent',
+        html,
+      );
+    }
+
+    this.logger.log(`Subscription ${subscription.id} deleted, recurrence ${recurrence.id} canceled`);
   }
 }

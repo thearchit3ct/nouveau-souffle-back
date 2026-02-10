@@ -61,4 +61,75 @@ export class StripeService {
   async retrievePaymentIntent(id: string): Promise<Stripe.PaymentIntent> {
     return this.ensureStripe().paymentIntents.retrieve(id);
   }
+
+  async createCustomer(
+    email: string,
+    name: string,
+    metadata?: Record<string, string>,
+  ): Promise<Stripe.Customer> {
+    const customer = await this.ensureStripe().customers.create({
+      email,
+      name,
+      metadata,
+    });
+    this.logger.log(`Stripe customer created: ${customer.id}`);
+    return customer;
+  }
+
+  async createSubscription(
+    customerId: string,
+    priceId: string,
+    metadata?: Record<string, string>,
+  ): Promise<Stripe.Subscription> {
+    const subscription = await this.ensureStripe().subscriptions.create({
+      customer: customerId,
+      items: [{ price: priceId }],
+      metadata,
+      payment_behavior: 'default_incomplete',
+      expand: ['latest_invoice.payment_intent'],
+    });
+    this.logger.log(`Subscription created: ${subscription.id}`);
+    return subscription;
+  }
+
+  async cancelSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
+    const sub = await this.ensureStripe().subscriptions.cancel(subscriptionId);
+    this.logger.log(`Subscription canceled: ${subscriptionId}`);
+    return sub;
+  }
+
+  async pauseSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
+    const sub = await this.ensureStripe().subscriptions.update(subscriptionId, {
+      cancel_at_period_end: true,
+    });
+    this.logger.log(`Subscription paused (cancel at period end): ${subscriptionId}`);
+    return sub;
+  }
+
+  async resumeSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
+    const sub = await this.ensureStripe().subscriptions.update(subscriptionId, {
+      cancel_at_period_end: false,
+    });
+    this.logger.log(`Subscription resumed: ${subscriptionId}`);
+    return sub;
+  }
+
+  async createPrice(
+    amount: number,
+    currency: string,
+    interval: 'month' | 'quarter' | 'year',
+  ): Promise<Stripe.Price> {
+    // Stripe only supports month/year intervals, so quarterly = 3 months
+    const stripeInterval = interval === 'quarter' ? 'month' : interval === 'year' ? 'year' : 'month';
+    const intervalCount = interval === 'quarter' ? 3 : 1;
+
+    const price = await this.ensureStripe().prices.create({
+      unit_amount: amount,
+      currency,
+      recurring: { interval: stripeInterval, interval_count: intervalCount },
+      product_data: { name: `Don recurrent ${(amount / 100).toFixed(2)} EUR` },
+    });
+    this.logger.log(`Price created: ${price.id}`);
+    return price;
+  }
 }
