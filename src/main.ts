@@ -22,6 +22,7 @@ async function bootstrap() {
       'Authorization',
       ...supertokens.getAllCORSHeaders(),
     ],
+    exposedHeaders: supertokens.getAllCORSHeaders(),
     credentials: true,
   });
 
