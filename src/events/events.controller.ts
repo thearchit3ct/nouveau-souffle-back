@@ -7,8 +7,10 @@ import {
   Param,
   Body,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -53,9 +55,11 @@ export class EventsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get event by ID' })
   @ApiResponse({ status: 200, description: 'Event details' })
-  async findOne(@Param('id') id: string) {
-    // No auth required for public events; visibility checked in service
-    return this.eventsService.findOne(id);
+  async findOne(@Param('id') id: string, @Req() req: Request) {
+    // Extract role from session if present (optional auth)
+    const session = (req as any).session;
+    const role = session?.getAccessTokenPayload?.()?.role;
+    return this.eventsService.findOne(id, role);
   }
 
   @Post()
