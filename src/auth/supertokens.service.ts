@@ -11,6 +11,9 @@ export class SuperTokensService {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
   ) {
+    const websiteUrl = this.config.get<string>('WEBSITE_URL') || 'http://localhost:3000';
+    const isLocal = websiteUrl.includes('localhost');
+
     supertokens.init({
       framework: 'express',
       supertokens: {
@@ -72,6 +75,7 @@ export class SuperTokensService {
           },
         }),
         Session.init({
+          ...(isLocal ? {} : { cookieDomain: '.ns.thearchit3ct.xyz' }),
           override: {
             functions: (originalImplementation) => ({
               ...originalImplementation,
