@@ -174,6 +174,81 @@ enum EnrollmentStatus {
   ABANDONED
 }
 
+// Module Maraude enums
+
+enum MaraudeStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELED
+}
+
+enum EncounterType {
+  FIRST_CONTACT
+  FOLLOW_UP
+  EMERGENCY
+  CHECK_IN
+  REFERRAL_ONLY
+}
+
+enum UrgencyLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ReferralStatus {
+  PROPOSED
+  ACCEPTED
+  COMPLETED
+  REFUSED
+  NO_SHOW
+  EXPIRED
+}
+
+enum BeneficiaryGender {
+  MALE
+  FEMALE
+  OTHER
+  UNKNOWN
+}
+
+enum HousingStatus {
+  STREET
+  SHELTER
+  SQUAT
+  TEMPORARY
+  HOSTED
+  HOUSED
+  UNKNOWN
+}
+
+enum AdministrativeStatus {
+  REGULAR
+  ASYLUM_SEEKER
+  REFUGEE
+  UNDOCUMENTED
+  UNKNOWN
+  OTHER
+}
+
+enum GdprConsentStatus {
+  GIVEN
+  ORAL
+  VITAL
+  REFUSED
+  NOT_ASKED
+  WITHDRAWN
+}
+
+enum MaraudeIncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
 // ---------------------------------------------------------------------------
 // Models
 // ---------------------------------------------------------------------------
@@ -217,6 +292,14 @@ model User {
   approvedVolunteers Volunteer[]         @relation("VolunteerApprover")
   documents          Document[]
   trainingEnrollments TrainingEnrollment[]
+
+  // Module Maraude
+  coordinatedMaraudes      Maraude[]            @relation("MaraudeCoordinator")
+  maraudeParticipations    MaraudeParticipant[] @relation("MaraudeParticipants")
+  encountersRecorded       Encounter[]          @relation("EncounterRecordedBy")
+  referralsMade            Referral[]           @relation("ReferralBy")
+  maraudeReportsAuthored   MaraudeReport[]      @relation("MaraudeReportAuthor")
+  maraudeIncidentsReported MaraudeIncident[]    @relation("IncidentReporter")
 
   @@index([status])
   @@index([role])
@@ -586,6 +669,7 @@ model Volunteer {
   approvedBy  User?                 @relation("VolunteerApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   assignments VolunteerAssignment[]
   enrollments TrainingEnrollment[]
+  maraudeParticipations MaraudeParticipant[]
 
   @@index([status])
   @@index([email])
@@ -723,4 +807,346 @@ model StripeWebhookLog {
 
   @@index([type])
   @@map("stripe_webhook_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Module Maraude
+// ---------------------------------------------------------------------------
+
+model Beneficiary {
+  id                    String               @id @default(uuid())
+  nickname              String
+  firstName             String?              @map("first_name")
+  lastName              String?              @map("last_name")
+  estimatedAge          Int?                 @map("estimated_age")
+  dateOfBirth           DateTime?            @map("date_of_birth")
+  gender                BeneficiaryGender    @default(UNKNOWN)
+  nationality           String?
+  spokenLanguages       String[]             @default([]) @map("spoken_languages")
+
+  housingStatus         HousingStatus        @default(UNKNOWN) @map("housing_status")
+  administrativeStatus  AdministrativeStatus @default(UNKNOWN) @map("administrative_status")
+  hasEmployment         Boolean?             @map("has_employment")
+  healthNotes           String?              @map("health_notes")
+  hasPets               Boolean              @default(false) @map("has_pets")
+  petDetails            String?              @map("pet_details")
+  usualLocation         String?              @map("usual_location")
+  usualLocationLat      Decimal?             @db.Decimal(10, 7) @map("usual_location_lat")
+  usualLocationLng      Decimal?             @db.Decimal(10, 7) @map("usual_location_lng")
+
+  photoUrl              String?              @map("photo_url")
+  photoConsentGiven     Boolean              @default(false) @map("photo_consent_given")
+  photoConsentDate      DateTime?            @map("photo_consent_date")
+
+  gdprConsentStatus     GdprConsentStatus    @default(NOT_ASKED) @map("gdpr_consent_status")
+  gdprConsentDate       DateTime?            @map("gdpr_consent_date")
+  dataRetentionUntil    DateTime?            @map("data_retention_until")
+  anonymizedAt          DateTime?            @map("anonymized_at")
+
+  notes                 String?
+  tags                  String[]             @default([])
+
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+  deletedAt             DateTime?            @map("deleted_at")
+
+  encounters            Encounter[]
+  referrals             Referral[]
+
+  @@index([nickname])
+  @@index([gdprConsentStatus])
+  @@index([housingStatus])
+  @@index([deletedAt])
+  @@map("beneficiaries")
+}
+
+model MaraudeZone {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  description  String?
+  color        String?
+  centerLat    Decimal? @db.Decimal(10, 7) @map("center_lat")
+  centerLng    Decimal? @db.Decimal(10, 7) @map("center_lng")
+  radiusKm     Decimal? @db.Decimal(5, 2) @map("radius_km")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  maraudes     Maraude[]
+
+  @@map("maraude_zones")
+}
+
+model Maraude {
+  id                  String         @id @default(uuid())
+  zoneId              String?        @map("zone_id")
+  coordinatorId       String         @map("coordinator_id")
+  title               String?
+  description         String?
+  status              MaraudeStatus  @default(PLANNED)
+
+  plannedStartAt      DateTime       @map("planned_start_at")
+  plannedEndAt        DateTime?      @map("planned_end_at")
+  actualStartAt       DateTime?      @map("actual_start_at")
+  actualEndAt         DateTime?      @map("actual_end_at")
+
+  startLocationName   String?        @map("start_location_name")
+  startLocationLat    Decimal?       @db.Decimal(10, 7) @map("start_location_lat")
+  startLocationLng    Decimal?       @db.Decimal(10, 7) @map("start_location_lng")
+
+  weatherConditions   String?        @map("weather_conditions")
+  temperatureCelsius  Decimal?       @db.Decimal(4, 1) @map("temperature_celsius")
+  generalObservations String?        @map("general_observations")
+  vehicleInfo         String?        @map("vehicle_info")
+  suppliesDistributed Json           @default("{}") @map("supplies_distributed")
+
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  zone                MaraudeZone?   @relation(fields: [zoneId], references: [id], onDelete: SetNull)
+  coordinator         User           @relation("MaraudeCoordinator", fields: [coordinatorId], references: [id], onDelete: Restrict)
+  participants        MaraudeParticipant[]
+  encounters          Encounter[]
+  report              MaraudeReport?
+  incidents           MaraudeIncident[]
+
+  @@index([status, plannedStartAt])
+  @@index([zoneId])
+  @@index([coordinatorId])
+  @@map("maraudes")
+}
+
+model MaraudeParticipant {
+  id           String    @id @default(uuid())
+  maraudeId    String    @map("maraude_id")
+  userId       String?   @map("user_id")
+  volunteerId  String?   @map("volunteer_id")
+  role         String    @default("VOLUNTEER")
+  joinedAt     DateTime  @default(now()) @map("joined_at")
+  leftAt       DateTime? @map("left_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  maraude      Maraude    @relation(fields: [maraudeId], references: [id], onDelete: Cascade)
+  user         User?      @relation("MaraudeParticipants", fields: [userId], references: [id], onDelete: SetNull)
+  volunteer    Volunteer? @relation(fields: [volunteerId], references: [id], onDelete: SetNull)
+
+  @@unique([maraudeId, userId])
+  @@index([maraudeId])
+  @@map("maraude_participants")
+}
+
+model NeedCategory {
+  id           String   @id @default(uuid())
+  code         String   @unique
+  name         String
+  description  String?
+  icon         String?
+  color        String?
+  parentId     String?  @map("parent_id")
+  displayOrder Int      @default(0) @map("display_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  parent         NeedCategory?     @relation("NeedHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children       NeedCategory[]    @relation("NeedHierarchy")
+  encounterNeeds EncounterNeed[]
+
+  @@index([parentId])
+  @@map("need_categories")
+}
+
+model ActionCategory {
+  id           String   @id @default(uuid())
+  code         String   @unique
+  name         String
+  description  String?
+  icon         String?
+  color        String?
+  displayOrder Int      @default(0) @map("display_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  encounterActions EncounterAction[]
+
+  @@map("action_categories")
+}
+
+model Encounter {
+  id               String        @id @default(uuid())
+  maraudeId        String        @map("maraude_id")
+  beneficiaryId    String?       @map("beneficiary_id")
+  recordedById     String        @map("recorded_by_id")
+
+  type             EncounterType @default(FIRST_CONTACT)
+  urgencyLevel     UrgencyLevel  @default(LOW) @map("urgency_level")
+
+  locationName     String?       @map("location_name")
+  locationLat      Decimal?      @db.Decimal(10, 7) @map("location_lat")
+  locationLng      Decimal?      @db.Decimal(10, 7) @map("location_lng")
+
+  physicalState    String?       @map("physical_state")
+  mentalState      String?       @map("mental_state")
+  socialContext     String?       @map("social_context")
+  notes            String?
+  privateNotes     String?       @map("private_notes")
+
+  itemsDistributed Json          @default("{}") @map("items_distributed")
+  durationMinutes  Int?          @map("duration_minutes")
+
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  maraude          Maraude       @relation(fields: [maraudeId], references: [id], onDelete: Cascade)
+  beneficiary      Beneficiary?  @relation(fields: [beneficiaryId], references: [id], onDelete: SetNull)
+  recordedBy       User          @relation("EncounterRecordedBy", fields: [recordedById], references: [id], onDelete: Restrict)
+  needs            EncounterNeed[]
+  actions          EncounterAction[]
+  referrals        Referral[]
+
+  @@index([maraudeId])
+  @@index([beneficiaryId])
+  @@index([urgencyLevel])
+  @@index([createdAt])
+  @@map("encounters")
+}
+
+model EncounterNeed {
+  id             String   @id @default(uuid())
+  encounterId    String   @map("encounter_id")
+  needCategoryId String   @map("need_category_id")
+  priority       Int      @default(0)
+  isAddressed    Boolean  @default(false) @map("is_addressed")
+  notes          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  encounter    Encounter    @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  needCategory NeedCategory @relation(fields: [needCategoryId], references: [id], onDelete: Restrict)
+
+  @@unique([encounterId, needCategoryId])
+  @@map("encounter_needs")
+}
+
+model EncounterAction {
+  id               String   @id @default(uuid())
+  encounterId      String   @map("encounter_id")
+  actionCategoryId String   @map("action_category_id")
+  quantity         Int      @default(1)
+  notes            String?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  encounter      Encounter      @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  actionCategory ActionCategory @relation(fields: [actionCategoryId], references: [id], onDelete: Restrict)
+
+  @@unique([encounterId, actionCategoryId])
+  @@map("encounter_actions")
+}
+
+model ReferralStructure {
+  id                String   @id @default(uuid())
+  name              String
+  type              String
+  address           String?
+  phone             String?
+  email             String?
+  website           String?
+  openingHours      String?  @map("opening_hours")
+  capacity          Int?
+  admissionCriteria String?  @map("admission_criteria")
+  latitude          Decimal? @db.Decimal(10, 7)
+  longitude         Decimal? @db.Decimal(10, 7)
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  referrals         Referral[]
+
+  @@index([type])
+  @@index([isActive])
+  @@map("referral_structures")
+}
+
+model Referral {
+  id               String         @id @default(uuid())
+  encounterId      String?        @map("encounter_id")
+  beneficiaryId    String         @map("beneficiary_id")
+  structureId      String?        @map("structure_id")
+  referredById     String         @map("referred_by_id")
+
+  structureName    String?        @map("structure_name")
+  reason           String?
+  status           ReferralStatus @default(PROPOSED)
+  notes            String?
+  appointmentDate  DateTime?      @map("appointment_date")
+  completedAt      DateTime?      @map("completed_at")
+  followUpDate     DateTime?      @map("follow_up_date")
+  followUpNotes    String?        @map("follow_up_notes")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  encounter        Encounter?         @relation(fields: [encounterId], references: [id], onDelete: SetNull)
+  beneficiary      Beneficiary        @relation(fields: [beneficiaryId], references: [id], onDelete: Cascade)
+  structure        ReferralStructure? @relation(fields: [structureId], references: [id], onDelete: SetNull)
+  referredBy       User               @relation("ReferralBy", fields: [referredById], references: [id], onDelete: Restrict)
+
+  @@index([beneficiaryId])
+  @@index([status])
+  @@index([followUpDate])
+  @@map("referrals")
+}
+
+model MaraudeReport {
+  id                     String    @id @default(uuid())
+  maraudeId              String    @unique @map("maraude_id")
+  authorId               String    @map("author_id")
+
+  totalEncounters        Int       @default(0) @map("total_encounters")
+  newBeneficiaries       Int       @default(0) @map("new_beneficiaries")
+  followUpEncounters     Int       @default(0) @map("follow_up_encounters")
+  emergencyEncounters    Int       @default(0) @map("emergency_encounters")
+  referralsMade          Int       @default(0) @map("referrals_made")
+
+  mealsDistributed       Int       @default(0) @map("meals_distributed")
+  blanketsDistributed    Int       @default(0) @map("blankets_distributed")
+  hygieneKitsDistributed Int       @default(0) @map("hygiene_kits_distributed")
+  otherDistributions     Json      @default("{}") @map("other_distributions")
+
+  summary                String?
+  pointsOfAttention      String?   @map("points_of_attention")
+  positiveHighlights     String?   @map("positive_highlights")
+  suggestions            String?
+
+  submittedAt            DateTime? @map("submitted_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  maraude                Maraude   @relation(fields: [maraudeId], references: [id], onDelete: Cascade)
+  author                 User      @relation("MaraudeReportAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@map("maraude_reports")
+}
+
+model MaraudeIncident {
+  id            String                   @id @default(uuid())
+  maraudeId     String                   @map("maraude_id")
+  reportedById  String                   @map("reported_by_id")
+  severity      MaraudeIncidentSeverity  @default(LOW)
+  title         String
+  description   String?
+  locationName  String?                  @map("location_name")
+  locationLat   Decimal?                 @db.Decimal(10, 7) @map("location_lat")
+  locationLng   Decimal?                 @db.Decimal(10, 7) @map("location_lng")
+  occurredAt    DateTime                 @map("occurred_at")
+  resolvedAt    DateTime?                @map("resolved_at")
+  resolution    String?
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  updatedAt     DateTime                 @updatedAt @map("updated_at")
+
+  maraude       Maraude @relation(fields: [maraudeId], references: [id], onDelete: Cascade)
+  reportedBy    User    @relation("IncidentReporter", fields: [reportedById], references: [id], onDelete: Restrict)
+
+  @@index([maraudeId])
+  @@index([severity])
+  @@map("maraude_incidents")
 }

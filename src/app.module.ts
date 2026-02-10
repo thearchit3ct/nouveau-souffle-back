@@ -25,6 +25,13 @@ import { RecurrencesModule } from './recurrences/recurrences.module.js';
 import { VolunteersModule } from './volunteers/volunteers.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
 import { TrainingsModule } from './trainings/trainings.module.js';
+import { MaraudesModule } from './maraudes/maraudes.module.js';
+import { BeneficiariesModule } from './beneficiaries/beneficiaries.module.js';
+import { EncountersModule } from './encounters/encounters.module.js';
+import { ReferralsModule } from './referrals/referrals.module.js';
+import { ReferralStructuresModule } from './referral-structures/referral-structures.module.js';
+import { MaraudeStatsModule } from './maraude-stats/maraude-stats.module.js';
+import { MaraudeCategoriesModule } from './maraude-categories/maraude-categories.module.js';
 import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
@@ -54,6 +61,13 @@ import { ThrottlerModule } from '@nestjs/throttler';
     VolunteersModule,
     DocumentsModule,
     TrainingsModule,
+    MaraudesModule,
+    BeneficiariesModule,
+    EncountersModule,
+    ReferralsModule,
+    ReferralStructuresModule,
+    MaraudeStatsModule,
+    MaraudeCategoriesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
