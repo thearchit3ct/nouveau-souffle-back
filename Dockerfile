@@ -7,6 +7,9 @@ RUN npm ci
 RUN npx prisma generate
 COPY . .
 RUN npm run build
+# Replace tsc-compiled generated files with original Prisma-generated .ts files
+# (tsc preserves .ts imports but compiles to .js, causing module resolution failures)
+RUN rm -rf dist/generated && cp -r generated dist/generated
 
 FROM node:22-alpine
 WORKDIR /app
