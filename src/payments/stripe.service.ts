@@ -4,7 +4,7 @@ import Stripe from 'stripe';
 
 @Injectable()
 export class StripeService {
-  private readonly stripe: Stripe;
+  private readonly stripe: Stripe | null;
   private readonly webhookSecret: string;
   private readonly logger = new Logger(StripeService.name);
 
@@ -12,10 +12,22 @@ export class StripeService {
     const secretKey = this.config.get<string>('STRIPE_SECRET_KEY', '');
     this.webhookSecret = this.config.get<string>('STRIPE_WEBHOOK_SECRET', '');
 
-    this.stripe = new Stripe(secretKey, {
-      apiVersion: '2024-12-18.acacia' as Stripe.LatestApiVersion,
-      maxNetworkRetries: 3,
-    });
+    if (secretKey) {
+      this.stripe = new Stripe(secretKey, {
+        apiVersion: '2024-12-18.acacia' as Stripe.LatestApiVersion,
+        maxNetworkRetries: 3,
+      });
+    } else {
+      this.stripe = null;
+      this.logger.warn('STRIPE_SECRET_KEY not configured — Stripe payments disabled');
+    }
+  }
+
+  private ensureStripe(): Stripe {
+    if (!this.stripe) {
+      throw new Error('Stripe is not configured. Set STRIPE_SECRET_KEY env var.');
+    }
+    return this.stripe;
   }
 
   async createPaymentIntent(
@@ -32,14 +44,14 @@ export class StripeService {
     };
     if (receiptEmail) params.receipt_email = receiptEmail;
 
-    const intent = await this.stripe.paymentIntents.create(params);
+    const intent = await this.ensureStripe().paymentIntents.create(params);
     this.logger.log(`PaymentIntent created: ${intent.id} for ${amount} ${currency}`);
 
     return { id: intent.id, client_secret: intent.client_secret! };
   }
 
   constructWebhookEvent(rawBody: Buffer, signature: string): Stripe.Event {
-    return this.stripe.webhooks.constructEvent(
+    return this.ensureStripe().webhooks.constructEvent(
       rawBody,
       signature,
       this.webhookSecret,
@@ -47,6 +59,6 @@ export class StripeService {
   }
 
   async retrievePaymentIntent(id: string): Promise<Stripe.PaymentIntent> {
-    return this.stripe.paymentIntents.retrieve(id);
+    return this.ensureStripe().paymentIntents.retrieve(id);
   }
 }
