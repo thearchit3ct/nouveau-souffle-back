@@ -69,6 +69,18 @@ async function bootstrap() {
     .addTag('webhooks', 'Stripe webhook handlers')
     .addTag('receipts', 'Donation receipt management')
     .addTag('contact', 'Contact form')
+    .addTag('search', 'Full-text search')
+    .addTag('recurrences', 'Recurring donations')
+    .addTag('volunteers', 'Volunteer management')
+    .addTag('documents', 'Document management')
+    .addTag('trainings', 'Training management')
+    .addTag('maraudes', 'Maraude session management')
+    .addTag('beneficiaries', 'Beneficiary management')
+    .addTag('encounters', 'Encounter tracking')
+    .addTag('referrals', 'Referral/orientation management')
+    .addTag('referral-structures', 'Partner structures directory')
+    .addTag('maraude-stats', 'Maraude analytics & stats')
+    .addTag('maraude-categories', 'Need & action categories')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
