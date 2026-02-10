@@ -14,9 +14,7 @@ COPY --from=build /app/package*.json ./
 COPY --from=build /app/prisma ./prisma/
 COPY --from=build /app/prisma.config.ts ./
 RUN npm ci --omit=dev
-RUN npx prisma generate
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/generated ./generated
 ENV NODE_ENV=production
 EXPOSE 3001
 CMD ["node", "dist/src/main.js"]
