@@ -7,11 +7,8 @@ RUN npm ci
 RUN npx prisma generate
 COPY . .
 RUN npm run build
-# Replace tsc-compiled generated files with original Prisma-generated .ts files.
-# Then rewrite imports in compiled .js files: .../generated/prisma/X.js -> X.ts
-# so Node.js 22 --experimental-strip-types can process the .ts sources.
-RUN rm -rf dist/generated && cp -r generated dist/generated \
-    && find dist/src -name '*.js' -exec sed -i "s|/generated/prisma/\([^'\"]*\)\.js|/generated/prisma/\1.ts|g" {} +
+# Replace tsc-compiled generated files with Prisma originals (includes CJS runtime + WASM)
+RUN rm -rf dist/generated && cp -r generated dist/generated
 
 FROM node:22-alpine
 WORKDIR /app

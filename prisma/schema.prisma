@@ -3,7 +3,7 @@
 // Auth: SuperTokens (passkey + email/pwd + 2FA TOTP)
 
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../generated/prisma"
 }
 
