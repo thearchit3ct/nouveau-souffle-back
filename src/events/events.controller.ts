@@ -8,9 +8,10 @@ import {
   Body,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -21,6 +22,7 @@ import {
 import { EventsService } from './events.service.js';
 import { CreateEventDto } from './dto/create-event.dto.js';
 import { UpdateEventDto } from './dto/update-event.dto.js';
+import { verifySession } from 'supertokens-node/recipe/session/framework/express';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { RolesGuard } from '../auth/roles.guard.js';
 import { Roles } from '../auth/roles.decorator.js';
@@ -55,8 +57,20 @@ export class EventsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get event by ID' })
   @ApiResponse({ status: 200, description: 'Event details' })
-  async findOne(@Param('id') id: string, @Req() req: Request) {
-    // Extract role from session if present (optional auth)
+  async findOne(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    // Try to parse optional session for visibility check
+    try {
+      await new Promise<void>((resolve, reject) => {
+        verifySession({ sessionRequired: false })(req as any, res as any, (err?: any) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    } catch { /* no session, that's fine */ }
     const session = (req as any).session;
     const role = session?.getAccessTokenPayload?.()?.role;
     return this.eventsService.findOne(id, role);
