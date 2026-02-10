@@ -31,8 +31,8 @@ export class SearchService implements OnModuleInit {
 
   constructor(private readonly config: ConfigService) {
     this.client = new MeiliSearch({
-      host: this.config.get<string>('MEILISEARCH_URL', 'http://ns-meilisearch:7700'),
-      apiKey: this.config.get<string>('MEILISEARCH_MASTER_KEY', ''),
+      host: this.config.get<string>('MEILISEARCH_HOST', this.config.get<string>('MEILISEARCH_URL', 'http://ns-meilisearch:7700')),
+      apiKey: this.config.get<string>('MEILISEARCH_API_KEY', this.config.get<string>('MEILISEARCH_MASTER_KEY', '')),
     });
   }
 
