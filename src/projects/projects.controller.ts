@@ -42,11 +42,16 @@ export class ProjectsController {
     return this.projectsService.findAll(pageNum, limitNum);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get project by ID (public)' })
+  @Get(':slug')
+  @ApiOperation({ summary: 'Get project by slug or ID (public)' })
   @ApiResponse({ status: 200, description: 'Project details' })
-  async findOne(@Param('id') id: string) {
-    return this.projectsService.findOne(id);
+  async findOne(@Param('slug') slug: string) {
+    // Try slug first, fallback to ID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(slug)) {
+      return this.projectsService.findOne(slug);
+    }
+    return this.projectsService.findBySlug(slug);
   }
 
   @Post()

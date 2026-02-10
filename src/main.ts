@@ -57,6 +57,9 @@ async function bootstrap() {
     .addTag('projects', 'Project management')
     .addTag('events', 'Event management')
     .addTag('notifications', 'Notification management')
+    .addTag('articles', 'Article/blog management')
+    .addTag('categories', 'Category management')
+    .addTag('uploads', 'File upload management')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);

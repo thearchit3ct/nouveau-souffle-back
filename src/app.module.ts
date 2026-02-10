@@ -13,6 +13,9 @@ import { MembershipsModule } from './memberships/memberships.module.js';
 import { DonationsModule } from './donations/donations.module.js';
 import { ProjectsModule } from './projects/projects.module.js';
 import { EventsModule } from './events/events.module.js';
+import { CategoriesModule } from './categories/categories.module.js';
+import { ArticlesModule } from './articles/articles.module.js';
+import { UploadModule } from './upload/upload.module.js';
 
 @Module({
   imports: [
@@ -28,6 +31,9 @@ import { EventsModule } from './events/events.module.js';
     DonationsModule,
     ProjectsModule,
     EventsModule,
+    CategoriesModule,
+    ArticlesModule,
+    UploadModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -33,6 +33,12 @@ export class ProjectsService {
     return { data: project };
   }
 
+  async findBySlug(slug: string) {
+    const project = await this.prisma.project.findUnique({ where: { slug } });
+    if (!project) throw new NotFoundException('Projet non trouve');
+    return { data: project };
+  }
+
   async create(dto: CreateProjectDto) {
     const slug = this.generateSlug(dto.name);
 

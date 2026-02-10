@@ -339,6 +339,145 @@ async function main() {
     });
   }
 
+  // Seed articles
+  const categories = await prisma.category.findMany();
+  const actuCat = categories.find((c) => c.slug === 'actualites');
+  const temoCat = categories.find((c) => c.slug === 'temoignages');
+
+  const existingArticles = await prisma.article.count();
+  if (existingArticles === 0) {
+    const article1 = await prisma.article.create({
+      data: {
+        authorId: admin.id,
+        title: 'Lancement de la Mission Togo 2026',
+        slug: 'lancement-mission-togo-2026',
+        excerpt:
+          "Decouvrez notre nouveau projet phare : la construction d'une ecole dans la region de Kara au Togo, prevue pour mars 2026.",
+        content: `# Lancement de la Mission Togo 2026
+
+Nous sommes heureux de vous annoncer le lancement officiel de notre projet le plus ambitieux a ce jour : la **Mission Togo 2026**.
+
+## Un projet d'envergure
+
+Ce projet vise a construire une ecole primaire complete dans la region de Kara, au nord du Togo. Cette zone rurale manque cruellement d'infrastructures educatives, et de nombreux enfants doivent parcourir plus de 10 kilometres chaque jour pour se rendre en classe.
+
+## Les objectifs
+
+Notre objectif est de collecter **25 000 euros** pour financer :
+- La construction de 6 salles de classe
+- L'installation de sanitaires
+- La mise en place d'un point d'eau potable
+- L'achat de fournitures scolaires pour la premiere annee
+
+## Comment participer ?
+
+Vous pouvez nous soutenir de plusieurs manieres :
+1. **Faire un don** directement sur notre plateforme
+2. **Devenir membre** de l'association
+3. **Partager** notre projet autour de vous
+4. **Participer** a nos evenements de collecte
+
+## Calendrier previsionnel
+
+- **Mars 2026** : Debut des travaux
+- **Juin 2026** : Fin du gros oeuvre
+- **Aout 2026** : Inauguration et premiere rentree
+
+Ensemble, donnons un nouveau souffle a l'education au Togo !`,
+        status: 'PUBLISHED',
+        publishedAt: new Date('2026-02-01'),
+        viewCount: 42,
+        commentsEnabled: true,
+      },
+    });
+
+    const article2 = await prisma.article.create({
+      data: {
+        authorId: admin.id,
+        title: "Temoignage : l'impact de notre aide a Madagascar",
+        slug: 'temoignage-impact-aide-madagascar',
+        excerpt:
+          'Marie, beneficiaire de notre programme a Madagascar, nous raconte comment le soutien de Nouveau Souffle a change sa vie.',
+        content: `# Temoignage : l'impact de notre aide a Madagascar
+
+*Par Marie Razafindrakoto, beneficiaire du programme d'aide humanitaire*
+
+## Une situation difficile
+
+Quand le cyclone a frappe notre village en janvier dernier, nous avons tout perdu. Notre maison, nos recoltes, nos affaires. Nous nous sommes retrouves sans rien, avec trois enfants a nourrir.
+
+## L'arrivee de l'aide
+
+C'est alors que l'equipe de Nouveau Souffle en Mission est arrivee. Ils nous ont apporte de la nourriture, des vetements et des materiaux pour reconstruire notre abri. Mais surtout, ils nous ont donne de l'espoir.
+
+## Reconstruction
+
+Grace au programme de microfinance mis en place par l'association, j'ai pu relancer mon activite de couture. Aujourd'hui, je gagne suffisamment pour nourrir ma famille et envoyer mes enfants a l'ecole.
+
+## Un message de gratitude
+
+Je veux remercier tous les donateurs et benevoles de Nouveau Souffle. Votre generositas a change nos vies. Vous etes la preuve que la solidarite peut deplacer des montagnes.
+
+*Merci du fond du coeur.*`,
+        status: 'PUBLISHED',
+        publishedAt: new Date('2026-01-20'),
+        viewCount: 28,
+        commentsEnabled: true,
+      },
+    });
+
+    await prisma.article.create({
+      data: {
+        authorId: admin.id,
+        title: 'Bilan annuel 2025 : une annee de croissance',
+        slug: 'bilan-annuel-2025',
+        excerpt:
+          "Retour sur les realisations et les defis de l'annee 2025 pour Nouveau Souffle en Mission.",
+        content: `# Bilan annuel 2025
+
+Ce brouillon sera publie apres validation par le bureau de l'association.
+
+## Chiffres cles
+- 45 nouveaux membres
+- 18 500 euros de dons collectes
+- 3 projets menes a bien
+- 12 evenements organises
+
+## A suivre...`,
+        status: 'DRAFT',
+        viewCount: 0,
+        commentsEnabled: false,
+      },
+    });
+
+    // Link articles to categories
+    if (actuCat) {
+      await prisma.articleCategory.createMany({
+        data: [
+          { articleId: article1.id, categoryId: actuCat.id },
+        ],
+        skipDuplicates: true,
+      });
+    }
+    if (temoCat) {
+      await prisma.articleCategory.createMany({
+        data: [
+          { articleId: article2.id, categoryId: temoCat.id },
+        ],
+        skipDuplicates: true,
+      });
+    }
+    if (actuCat && temoCat) {
+      // Article 1 also in temoignages
+      await prisma.articleCategory.createMany({
+        data: [
+          { articleId: article1.id, categoryId: temoCat.id },
+        ],
+        skipDuplicates: true,
+      });
+    }
+  }
+
   console.log('Seed completed successfully');
 }
 
