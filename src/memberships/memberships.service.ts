@@ -87,9 +87,9 @@ export class MembershipsService {
     return {
       data,
       meta: {
-        totalCount,
+        total: totalCount,
         page,
-        perPage: limit,
+        limit,
         totalPages: Math.ceil(totalCount / limit),
       },
     };

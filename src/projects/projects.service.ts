@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { SearchService } from '../search/search.service.js';
 import { CreateProjectDto } from './dto/create-project.dto.js';
 import { UpdateProjectDto } from './dto/update-project.dto.js';
 
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly searchService: SearchService,
+  ) {}
 
   async findAll(page = 1, limit = 25) {
     const skip = (page - 1) * limit;
@@ -56,6 +60,16 @@ export class ProjectsService {
       },
     });
 
+    // Index in Meilisearch
+    this.searchService.indexDocument('projects', project.id, {
+      name: project.name,
+      description: project.description,
+      status: project.status,
+      slug: project.slug,
+      imageUrl: project.imageUrl,
+      createdAt: project.createdAt,
+    });
+
     return { data: project };
   }
 
@@ -69,6 +83,17 @@ export class ProjectsService {
     if (dto.endDate) data.endDate = new Date(dto.endDate);
 
     const updated = await this.prisma.project.update({ where: { id }, data });
+
+    // Re-index in Meilisearch
+    this.searchService.indexDocument('projects', updated.id, {
+      name: updated.name,
+      description: updated.description,
+      status: updated.status,
+      slug: updated.slug,
+      imageUrl: updated.imageUrl,
+      createdAt: updated.createdAt,
+    });
+
     return { data: updated };
   }
 

@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { SearchService } from '../search/search.service.js';
 import { CreateArticleDto } from './dto/create-article.dto.js';
 import { UpdateArticleDto } from './dto/update-article.dto.js';
 
 @Injectable()
 export class ArticlesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly searchService: SearchService,
+  ) {}
 
   async findAllPublished(
     page = 1,
@@ -47,7 +51,7 @@ export class ArticlesService {
 
     return {
       data,
-      meta: { totalCount, page, perPage: limit, totalPages: Math.ceil(totalCount / limit) },
+      meta: { total: totalCount, page, limit, totalPages: Math.ceil(totalCount / limit) },
     };
   }
 
@@ -79,7 +83,7 @@ export class ArticlesService {
 
     return {
       data,
-      meta: { totalCount, page, perPage: limit, totalPages: Math.ceil(totalCount / limit) },
+      meta: { total: totalCount, page, limit, totalPages: Math.ceil(totalCount / limit) },
     };
   }
 
@@ -137,6 +141,18 @@ export class ArticlesService {
       },
     });
 
+    // Index in Meilisearch (fire-and-forget)
+    const categoryIds = article.categories?.map((c: any) => c.category?.id).filter(Boolean) ?? [];
+    this.searchService.indexDocument('articles', article.id, {
+      title: article.title,
+      excerpt: article.excerpt,
+      content: article.content,
+      status: article.status,
+      categoryIds,
+      publishedAt: article.publishedAt,
+      viewCount: article.viewCount,
+    });
+
     return { data: article };
   }
 
@@ -175,6 +191,20 @@ export class ArticlesService {
       },
     });
 
+    // Re-index updated article in Meilisearch
+    if (updated) {
+      const updatedCategoryIds = updated.categories?.map((c: any) => c.category?.id).filter(Boolean) ?? [];
+      this.searchService.indexDocument('articles', updated.id, {
+        title: updated.title,
+        excerpt: updated.excerpt,
+        content: updated.content,
+        status: updated.status,
+        categoryIds: updatedCategoryIds,
+        publishedAt: updated.publishedAt,
+        viewCount: updated.viewCount,
+      });
+    }
+
     return { data: updated };
   }
 
@@ -186,6 +216,18 @@ export class ArticlesService {
       where: { id },
       data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
+
+    // Index with PUBLISHED status
+    this.searchService.indexDocument('articles', updated.id, {
+      title: updated.title,
+      excerpt: updated.excerpt,
+      content: updated.content,
+      status: 'PUBLISHED',
+      categoryIds: [],
+      publishedAt: updated.publishedAt,
+      viewCount: updated.viewCount,
+    });
+
     return { data: updated };
   }
 
@@ -197,6 +239,10 @@ export class ArticlesService {
       where: { id },
       data: { status: 'ARCHIVED' },
     });
+
+    // Remove from search index when archived
+    this.searchService.removeDocument('articles', id);
+
     return { data: updated };
   }
 
@@ -205,6 +251,10 @@ export class ArticlesService {
     if (!existing) throw new NotFoundException('Article non trouve');
 
     await this.prisma.article.delete({ where: { id } });
+
+    // Remove from search index
+    this.searchService.removeDocument('articles', id);
+
     return { data: { deleted: true } };
   }
 

@@ -20,6 +20,7 @@ import { PaymentsModule } from './payments/payments.module.js';
 import { ContactModule } from './contact/contact.module.js';
 import { EmailModule } from './email/email.module.js';
 import { ReceiptsModule } from './receipts/receipts.module.js';
+import { SearchModule } from './search/search.module.js';
 import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
@@ -44,6 +45,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
     EmailModule,
     ReceiptsModule,
     ContactModule,
+    SearchModule,
   ],
   controllers: [AppController],
   providers: [AppService],

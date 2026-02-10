@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { SearchService } from '../search/search.service.js';
 import { CreateEventDto } from './dto/create-event.dto.js';
 import { UpdateEventDto } from './dto/update-event.dto.js';
 import { randomUUID } from 'crypto';
@@ -15,6 +16,7 @@ export class EventsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly searchService: SearchService,
   ) {}
 
   async findAll(page = 1, limit = 25, status?: string, type?: string, visibility?: string) {
@@ -37,7 +39,7 @@ export class EventsService {
 
     return {
       data,
-      meta: { totalCount, page, perPage: limit, totalPages: Math.ceil(totalCount / limit) },
+      meta: { total: totalCount, page, limit, totalPages: Math.ceil(totalCount / limit) },
     };
   }
 
@@ -80,6 +82,18 @@ export class EventsService {
       },
     });
 
+    // Index in Meilisearch
+    this.searchService.indexDocument('events', event.id, {
+      title: event.title,
+      description: event.description,
+      status: event.status,
+      type: event.type,
+      visibility: event.visibility,
+      locationName: event.locationName,
+      startDatetime: event.startDatetime,
+      slug: event.slug,
+    });
+
     return { data: event };
   }
 
@@ -96,6 +110,19 @@ export class EventsService {
     }
 
     const updated = await this.prisma.event.update({ where: { id }, data });
+
+    // Re-index in Meilisearch
+    this.searchService.indexDocument('events', updated.id, {
+      title: updated.title,
+      description: updated.description,
+      status: updated.status,
+      type: updated.type,
+      visibility: updated.visibility,
+      locationName: updated.locationName,
+      startDatetime: updated.startDatetime,
+      slug: updated.slug,
+    });
+
     return { data: updated };
   }
 
@@ -107,6 +134,9 @@ export class EventsService {
       where: { id },
       data: { status: 'CANCELED' },
     });
+
+    // Remove from search index when canceled
+    this.searchService.removeDocument('events', id);
 
     // Notify registered users
     const registrations = await this.prisma.eventRegistration.findMany({
@@ -238,7 +268,7 @@ export class EventsService {
 
     return {
       data,
-      meta: { totalCount, page, perPage: limit, totalPages: Math.ceil(totalCount / limit) },
+      meta: { total: totalCount, page, limit, totalPages: Math.ceil(totalCount / limit) },
     };
   }
 

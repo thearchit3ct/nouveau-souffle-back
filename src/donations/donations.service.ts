@@ -62,7 +62,7 @@ export class DonationsService {
 
     return {
       data,
-      meta: { totalCount, page, perPage: limit, totalPages: Math.ceil(totalCount / limit) },
+      meta: { total: totalCount, page, limit, totalPages: Math.ceil(totalCount / limit) },
     };
   }
 
@@ -87,7 +87,7 @@ export class DonationsService {
 
     return {
       data,
-      meta: { totalCount, page, perPage: limit, totalPages: Math.ceil(totalCount / limit) },
+      meta: { total: totalCount, page, limit, totalPages: Math.ceil(totalCount / limit) },
     };
   }
 
