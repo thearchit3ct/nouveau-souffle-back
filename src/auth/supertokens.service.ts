@@ -75,7 +75,10 @@ export class SuperTokensService {
           },
         }),
         Session.init({
-          ...(isLocal ? {} : { cookieDomain: '.ns.thearchit3ct.xyz' }),
+          ...(isLocal ? {} : {
+            cookieDomain: '.ns.thearchit3ct.xyz',
+            olderCookieDomain: 'api.ns.thearchit3ct.xyz',
+          }),
           override: {
             functions: (originalImplementation) => ({
               ...originalImplementation,
